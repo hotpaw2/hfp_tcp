@@ -1,7 +1,6 @@
 //
 // hfp_tcp_server.c
 //
-// 
 //  Serves IQ data using the rtl_tcp protocol 
 //	from an Airspy HF+ 
 //	on iPv6 port 1234
@@ -10,7 +9,7 @@
 //
 //   v.1.1.108 	2018-01-04  2017-12-29  rhn@nicholson.com
 //   Copyright 2017 Ronald H Nicholson Jr. All Rights Reserved.
-//   distribution under the BSD 2 clause license permitted
+//   re-distribution under the BSD 2 clause license permitted
 //
 //   macOS : clang -lm libairspyhf.1.0.0.dylib 
 //   pi : cc -std=c99 -lm -lairspyhf
