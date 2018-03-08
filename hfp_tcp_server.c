@@ -255,7 +255,7 @@ void *connection_handler()
 		        float g1 = data; // data : in 10th dB's
 		        float g2 = 0.1 * (float)(data); // undo 10ths
 		        fprintf(stdout, "setting gain to: %f dB\n", g2);
-		        float g4 = g2 - 20.2;		// offset
+		        float g4 = g2;  // g4 = g2 - 20.2; // removed bug fix offset
 		        float g5 = pow(10.0, 0.1 * g4); // convert from dB
 		        gain0 = GAIN8 * g5;		// 64.0 = nominal
 		        msg1 = msg;
