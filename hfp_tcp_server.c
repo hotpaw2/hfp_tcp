@@ -5,19 +5,21 @@
 //	from an Airspy HF+ 
 //	on iPv6 port 1234
 //
-//  requires libairspyhf from https://github.com/airspy/airspyhf
-//
-//   v.1.1.108 	2018-01-04  2017-12-29  rhn@nicholson.com
+//   v.1.1.201 	2018-06-09  2018-01-04  2017-12-29  rhn@nicholson.com
 //   Copyright 2017 Ronald H Nicholson Jr. All Rights Reserved.
 //   re-distribution under the BSD 2 clause license permitted
 //
 //   macOS : clang -lm libairspyhf.1.0.0.dylib 
 //   pi : cc -std=c99 -lm -lairspyhf
 //
+//   requires these 2 files to compile
+//     airspyhf.h
+//     libairspyhf.1.0.0.dylib or /usr/local/lib/libairspyhf.so.1.0.0
+//   from libairspyhf at https://github.com/airspy/airspyhf
 
 #define SOCKET_READ_TIMEOUT_SEC ( 10.0 * 60.0 )
-// #define SAMPLE_BITS 	(32)    // HF+ capable of float32 IQ data
 #define SAMPLE_BITS 	( 8)			// default to match rtl_tcp
+// #define SAMPLE_BITS 	(32)    // HF+ capable of float32 IQ data
 #define GAIN8		(64.0)			// default gain
 #define PORT		(1234)			// default port
 
@@ -150,6 +152,8 @@ int main(int argc, char *argv[]) {
 
         connection_handler(); 
 
+    }
+    
     n = airspyhf_close(device);
     printf("hf+ close status = %d\n", n);
 
