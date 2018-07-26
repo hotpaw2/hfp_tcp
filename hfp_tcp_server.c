@@ -17,6 +17,8 @@
 //     libairspyhf.1.0.0.dylib or /usr/local/lib/libairspyhf.so.1.0.0
 //   from libairspyhf at https://github.com/airspy/airspyhf
 
+#define VERSION "v.1.1.201"
+
 #define SOCKET_READ_TIMEOUT_SEC ( 10.0 * 60.0 )
 #define SAMPLE_BITS 	( 8)			// default to match rtl_tcp
 // #define SAMPLE_BITS 	(32)    // HF+ capable of float32 IQ data
@@ -77,6 +79,7 @@ int main(int argc, char *argv[]) {
 	}
     }
 
+    printf("\nhfp_tcp Version %s\n\n", VERSION);
     printf("Serving %d-bit samples on port %d\n", sampleBits, PORT);
 
     uint64_t serials[4] = { 0L,0L,0L,0L };
