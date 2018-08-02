@@ -9,8 +9,8 @@
 //   Copyright 2017 Ronald H Nicholson Jr. All Rights Reserved.
 //   re-distribution under the BSD 2 clause license permitted
 //
-//   macOS : clang -lm libairspyhf.1.0.0.dylib 
-//   pi : cc -std=c99 -lm -lairspyhf
+//   macOS : clang hfp_tcp_server.c -o hfp_tcp -lm libairspyhf.1.0.0.dylib
+//   pi :    cc hfp_tcp_server.c -o hfp_tcp -std=c99 -lm -lairspyhf
 //
 //   requires these 2 files to compile
 //     airspyhf.h
@@ -189,8 +189,8 @@ void *connection_handler()
     struct timeval timeout;
     timeout.tv_sec = SOCKET_READ_TIMEOUT_SEC;
     timeout.tv_usec = 0;
-    setsockopt( gClientSocketID, SOL_SOCKET, SO_RCVTIMEO,
-               &timeout, sizeof(timeout) );
+    //setsockopt( gClientSocketID, SOL_SOCKET, SO_RCVTIMEO,
+    //           &timeout, sizeof(timeout) );
     
     if (1) {		// 16 or 12-byte rtl_tcp header
         int sz = 16;
