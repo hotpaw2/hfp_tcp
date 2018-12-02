@@ -17,7 +17,7 @@
 //     libairspyhf.1.0.0.dylib or /usr/local/lib/libairspyhf.so.1.0.0
 //   from libairspyhf at https://github.com/airspy/airspyhf
 
-#define VERSION "v.1.1.201"
+#define VERSION "v.1.1.202"
 
 #define SOCKET_READ_TIMEOUT_SEC ( 10.0 * 60.0 )
 #define SAMPLE_BITS 	( 8)			// default to match rtl_tcp
@@ -64,6 +64,8 @@ long			previousSRate	= -1;
 float			gain0		    =  GAIN8;
 int 			gClientSocketID;
 
+char            UsageString[]   = "Usage:    [-p listen port (default: 1234)]\n          [-w 32]";
+
 int main(int argc, char *argv[]) {
     
     int listen_sockfd;
@@ -72,15 +74,34 @@ int main(int argc, char *argv[]) {
     int portno = PORT; 		// TODO: portno = atoi(argv[1]);
     int n;
     
-    if (argc > 1 && argv[1] != NULL) {
-        char *s = argv[1];
-        if (strncmp(s,"-32",3) == 0) {
-            sampleBits = 32;
+    if (argc>1) {
+        if (!((argc == 3) || (argc == 5))) {
+            printf("%s\n", UsageString);
+            exit(0);
+        }
+        for (int arg=3; arg<=argc; arg+=2) {
+            if (strcmp(argv[arg-2], "-p")==0) {
+                portno = atoi(argv[arg-1]);
+                if (portno == 0) {
+                    printf("invalid port number entry %s\n", argv[arg-1]);
+                    exit(0);
+                }
+            } else if (strcmp(argv[arg-2], "-w")==0) {
+                if (strcmp(argv[arg-1],"32")==0) {
+                    sampleBits = 32;
+                } else {
+                    printf("%s\n", UsageString);
+                    exit(0);
+                }
+            } else {
+                printf("%s\n", UsageString);
+                exit(0);
+            }
         }
     }
     
     printf("\nhfp_tcp Version %s\n\n", VERSION);
-    printf("Serving %d-bit samples on port %d\n", sampleBits, PORT);
+    printf("Serving %d-bit samples on port %d\n", sampleBits, portno);
     
     uint64_t serials[4] = { 0L,0L,0L,0L };
     int count = 2;
