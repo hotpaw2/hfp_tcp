@@ -1,12 +1,13 @@
 //
 // hfp_tcp_server.c
 //
-//  Serves IQ data using the rtl_tcp protocol 
-//	from an Airspy HF+ 
+//  Serves IQ data using the rtl_tcp protocol
+//	from an Airspy HF+
 //	on iPv6 port 1234
 //
-//   v.1.1.301 	2019-03-07 2018-06-09  2017-12-29  rhn@nicholson.com
-//   Copyright 2017,2019 Ronald H Nicholson Jr. All Rights Reserved.
+//   v.1.1.302 2019.03.14 barry@medoff.com
+//   v.1.1.201 2018-06-09  2018-01-04  2017-12-29  rhn@nicholson.com
+//   Copyright 2017 Ronald H Nicholson Jr. All Rights Reserved.
 //   re-distribution under the BSD 2 clause license permitted
 //
 //   macOS : clang hfp_tcp_server.c -o hfp_tcp -lm libairspyhf.1.0.0.dylib
@@ -17,7 +18,7 @@
 //     libairspyhf.1.0.0.dylib or /usr/local/lib/libairspyhf.so.1.0.0
 //   from libairspyhf at https://github.com/airspy/airspyhf
 
-#define VERSION "v.1.1.301"
+#define VERSION "v.1.1.302"
 
 #define SOCKET_READ_TIMEOUT_SEC ( 10.0 * 60.0 )
 #define SAMPLE_BITS 	( 8)			// default to match rtl_tcp
@@ -65,17 +66,17 @@ long		previousSRate	= -1;
 float		gain0		    =  GAIN8;
 int 		gClientSocketID;
 
-char UsageString[]   
+char UsageString[]
 	= "Usage:    [-p listen port (default: 1234)]\n          [-b 16]";
 
 int main(int argc, char *argv[]) {
-    
+
     int listen_sockfd;
     struct sockaddr_in6 serv_addr ;
     char client_addr_ipv6[100];
     int portno = PORT; 		// TODO: portno = atoi(argv[1]);
     int n;
-    
+
     if (argc>1) {
         if (!((argc == 3) || (argc == 5))) {
             printf("%s\n", UsageString);
@@ -103,10 +104,10 @@ int main(int argc, char *argv[]) {
             }
         }
     }
-    
+
     printf("\nhfp_tcp Version %s\n\n", VERSION);
     printf("Serving %d-bit samples on port %d\n", sampleBits, portno);
-    
+
     uint64_t serials[4] = { 0L,0L,0L,0L };
     int count = 2;
     n = airspyhf_list_devices(&serials[0], count);
@@ -117,10 +118,25 @@ int main(int argc, char *argv[]) {
     printf("%" PRIu64 "\n", t);
     serialnum = t;
     if (serialnum == 0L) { exit(-1); }
-    
+
     n = airspyhf_open_sn(&device, serialnum);
     printf("hf+ open status = %d\n", n);
     if (n < 0) { exit(-1); }
+
+    airspyhf_lib_version_t version;
+    airspyhf_lib_version(&version);
+    printf("\nlibairspyhf   %" PRIu32 ".%" PRIu32 ".%" PRIu32 "\n",
+           version.major_version, version.minor_version, version.revision);
+
+    char versionString[64];
+    uint8_t versionLength = 64;
+
+    bzero((char *)&versionString[0], 64);
+
+    n = airspyhf_version_string_read(device, &versionString[0], versionLength);
+    if (n == AIRSPYHF_ERROR) { printf("Error reading version string"); exit(-1); }
+    printf("hf+ firmware %s\n\n", versionString);
+
     int sampRate = 768000;
     n = airspyhf_set_samplerate(device, sampRate);
     printf("set rate status = %d %d\n", sampRate, n);
@@ -128,42 +144,42 @@ int main(int argc, char *argv[]) {
     long int f0 = 162450000;
     n = airspyhf_set_freq(device, f0);
     printf("set f0 status = %ld %d\n", f0, n);
-    
+
     printf("\nhfp_tcp IPv6 server started on port %d\n", portno);
-    
+
     listen_sockfd = socket(AF_INET6, SOCK_STREAM, 0);
     if (listen_sockfd < 0) {
         printf("ERROR opening socket");
         return(-1);
     }
-    
+
 #ifdef __APPLE__
     int val = 1;
     int r = setsockopt(listen_sockfd, SOL_SOCKET, SO_NOSIGPIPE,
                        (void*)&val, sizeof(val));
     printf("setsockopt status = %d \n", r);
 #endif
-    
+
     bzero((char *) &serv_addr, sizeof(serv_addr));
     serv_addr.sin6_flowinfo = 0;
     serv_addr.sin6_family = AF_INET6;
     serv_addr.sin6_addr = in6addr_any;
     serv_addr.sin6_port = htons(portno);
-    
+
     // Sockets Layer Call: bind()
     if (bind( listen_sockfd, (struct sockaddr *)&serv_addr,
              sizeof(serv_addr) ) < 0) {
         printf("ERROR on bind to listen\n");
         return(-1);
     }
-    
+
     listen(listen_sockfd, 5);
     fprintf(stdout, "listening for socket connection \n");
-    
+
     while (1) {
-        
+
         // accept a connection
-        
+
         struct sockaddr_in6 cli_addr;
         socklen_t claddrlen = sizeof(cli_addr);
         gClientSocketID = accept( listen_sockfd,
@@ -173,18 +189,18 @@ int main(int argc, char *argv[]) {
             printf("ERROR on accept\n");
             break;
         }
-        
+
         inet_ntop(AF_INET6, &(cli_addr.sin6_addr), client_addr_ipv6, 100);
         printf("\nConnected to client with IP address: %s\n",
                client_addr_ipv6);
-        
+
         connection_handler();
-        
+
     }
-    
+
     n = airspyhf_close(device);
     printf("hf+ close status = %d\n", n);
-    
+
     fflush(stdout);
     return 0;
 }  //  main
@@ -194,7 +210,7 @@ void *connection_handler()
     char buffer[256];
     int n = 0;
     int m = 0;
-    
+
     m = airspyhf_is_streaming(device);
     if (m > 0) {	// stop before restarting
         printf("hf+ is running = %d\n", m);
@@ -202,21 +218,21 @@ void *connection_handler()
         printf("hf+ stop status = %d\n", m);
         usleep(250L * 1000L);
     }
-    
+
     samples 	=  0;
     sendErrorFlag =  0;
     m = airspyhf_start(device, &sendcallback, &context);
     printf("hf+ start status = %d\n", m);
     if (n < 0) { exit(-1); }
     usleep(250L * 1000L);
-    
+
     // set a timeout so receive call won't block forever
     struct timeval timeout;
     timeout.tv_sec = SOCKET_READ_TIMEOUT_SEC;
     timeout.tv_usec = 0;
     //setsockopt( gClientSocketID, SOL_SOCKET, SO_RCVTIMEO,
     //           &timeout, sizeof(timeout) );
-    
+
     if (1) {		// 16 or 12-byte rtl_tcp header
         int sz = 16;
         if (sampleBits == 8) { sz = 12; }
@@ -229,7 +245,7 @@ void *connection_handler()
         n = send(gClientSocketID, header, sz, MSG_NOSIGNAL);
 #endif
     }
-    
+
     n = 1;
     while ((n > 0) && (sendErrorFlag == 0)) {
         int i, j, m;
@@ -261,7 +277,7 @@ void *connection_handler()
                 for (j=1;j<5;j++) {
                     data = 256 * data + (0x00ff & buffer[i+j]);
                 }
-                
+
                 if (msg == 1) {	// set frequency
                     int f0 = data;
                     fprintf(stdout, "setting frequency to: %d\n", f0);
@@ -292,7 +308,7 @@ void *connection_handler()
                         float g5 = pow(10.0, 0.1 * g4); // convert from dB
                         gain0 = GAIN8 * g5;		// 64.0 = nominal
                         msg1 = msg;
-		    } 
+		    }
                 }
                 if (msg > 4) {	// other
                     fprintf(stdout, "message = %d, data = %d\n", msg, data);
@@ -317,14 +333,14 @@ void *connection_handler()
         }
         // loop until error (socket close) or timeout
     } ;
-    
+
     m = airspyhf_is_streaming(device);
     printf("hf+ is running = %d\n", m);
     if (m) {
         m = airspyhf_stop(device);
         printf("hf+ stop status = %d\n", m);
     }
-    
+
     close(gClientSocketID);
     return(NULL);
 } // connection_handler()
@@ -337,7 +353,7 @@ int sendcallback(airspyhf_transfer_t *context)
     float  *p =  (float *)(context->samples);
     int    n  =  context->sample_count;
     int	   sz ;
-    
+
     //
     if ((sendblockcount % 100) == 0) {
         fprintf(stdout,"+"); fflush(stdout);
