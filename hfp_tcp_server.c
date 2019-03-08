@@ -5,8 +5,8 @@
 //	from an Airspy HF+ 
 //	on iPv6 port 1234
 //
-//   v.1.1.201 	2018-06-09  2018-01-04  2017-12-29  rhn@nicholson.com
-//   Copyright 2017 Ronald H Nicholson Jr. All Rights Reserved.
+//   v.1.1.301 	2019-03-07 2018-06-09  2017-12-29  rhn@nicholson.com
+//   Copyright 2017,2019 Ronald H Nicholson Jr. All Rights Reserved.
 //   re-distribution under the BSD 2 clause license permitted
 //
 //   macOS : clang hfp_tcp_server.c -o hfp_tcp -lm libairspyhf.1.0.0.dylib
@@ -17,10 +17,11 @@
 //     libairspyhf.1.0.0.dylib or /usr/local/lib/libairspyhf.so.1.0.0
 //   from libairspyhf at https://github.com/airspy/airspyhf
 
-#define VERSION "v.1.1.202"
+#define VERSION "v.1.1.301"
 
 #define SOCKET_READ_TIMEOUT_SEC ( 10.0 * 60.0 )
 #define SAMPLE_BITS 	( 8)			// default to match rtl_tcp
+// #define SAMPLE_BITS 	(16)			// default to match rsp_tcp
 // #define SAMPLE_BITS 	(32)    // HF+ capable of float32 IQ data
 #define GAIN8		(64.0)			// default gain
 #define PORT		(1234)			// default port
@@ -59,12 +60,13 @@ airspyhf_transfer_t context;
 int             sendErrorFlag   =  0;
 int             sampleBits	    =  SAMPLE_BITS;
 static long int samples 	    =  0;
-long  			sampRate  	    =  768000;
-long			previousSRate	= -1;
-float			gain0		    =  GAIN8;
-int 			gClientSocketID;
+long  		sampRate  	    =  768000;
+long		previousSRate	= -1;
+float		gain0		    =  GAIN8;
+int 		gClientSocketID;
 
-char            UsageString[]   = "Usage:    [-p listen port (default: 1234)]\n          [-w 32]";
+char UsageString[]   
+	= "Usage:    [-p listen port (default: 1234)]\n          [-b 16]";
 
 int main(int argc, char *argv[]) {
     
@@ -86,9 +88,11 @@ int main(int argc, char *argv[]) {
                     printf("invalid port number entry %s\n", argv[arg-1]);
                     exit(0);
                 }
-            } else if (strcmp(argv[arg-2], "-w")==0) {
-                if (strcmp(argv[arg-1],"32")==0) {
-                    sampleBits = 32;
+            } else if (strcmp(argv[arg-2], "-b")==0) {
+                if (strcmp(argv[arg-1],"16")==0) {
+                    sampleBits = 16;
+                } else if (strcmp(argv[arg-1],"8")==0) {
+                    sampleBits =  8;
                 } else {
                     printf("%s\n", UsageString);
                     exit(0);
@@ -278,16 +282,17 @@ void *connection_handler()
                     fprintf(stdout, "message = %d, data = %d\n", msg, data);
                 }
                 if (msg == 4) { 			// gain
-                    if (sampleBits == 8) {
+                    if (   (sampleBits ==  8)
+ 			|| (sampleBits == 16) ) {
                         // set gain ?
                         float g1 = data; // data : in 10th dB's
                         float g2 = 0.1 * (float)(data); // undo 10ths
                         fprintf(stdout, "setting gain to: %f dB\n", g2);
-                        float g4 = g2;  // g4 = g2 - 20.2; // removed bug fix offset
+                        float g4 = g2 - 12.0; // ad hoc offset
                         float g5 = pow(10.0, 0.1 * g4); // convert from dB
                         gain0 = GAIN8 * g5;		// 64.0 = nominal
                         msg1 = msg;
-                    }
+		    } 
                 }
                 if (msg > 4) {	// other
                     fprintf(stdout, "message = %d, data = %d\n", msg, data);
@@ -331,8 +336,7 @@ int sendcallback(airspyhf_transfer_t *context)
 {
     float  *p =  (float *)(context->samples);
     int    n  =  context->sample_count;
-    int	   sz =  8 * n;
-    float  g  =  gain0; // GAIN8;
+    int	   sz ;
     
     //
     if ((sendblockcount % 100) == 0) {
@@ -344,15 +348,28 @@ int sendcallback(airspyhf_transfer_t *context)
         // fwrite(p, 8, n, file);
         char  	*dataBuffer 	=  (char *)p;
         int 	k 		=  0;
-        if (sampleBits == 8) {
+        if (sampleBits ==  8) {
+            float  g  =  gain0; // GAIN8;
             for (int i=0; i<2*n; i++) {
                 float x = g * p[i];
                 int   k = (int)roundf(x);
-                tmpBuf[i] = 128 + k;
+                tmpBuf[i] = k + 128;  // 8-bit unsigned DC offset
             }
             dataBuffer = (char *)(&tmpBuf[0]);
             sz = 2 * n;
-        }
+        } else if (sampleBits == 16) {
+            int16_t *tmp16ptr = (int16_t *)&tmpBuf[0];
+	    float  g  =   64.0 * gain0; // GAIN16;
+            for (int i=0; i<2*n; i++) {
+                float x = g * p[i];
+                int   k = (int)roundf(x);
+                tmp16ptr[i] = k;
+            }
+            dataBuffer = (char *)(&tmpBuf[0]);
+            sz = 4 * n;
+	} else {
+	    sz = 8 * n;	// two 32-bit floats for IQ == 8 bytes
+	}
         int send_sockfd = gClientSocketID ;
 #ifdef __APPLE__
         k = send(send_sockfd, dataBuffer, sz, 0);
