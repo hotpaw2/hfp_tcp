@@ -10,11 +10,11 @@ If the Airspy SPY Server application has been successfully installed on the Rasp
 
 Step 1: Download and Build the Airspy HF+ Library
 
-The Airspy HF+ Library is an open source  package that includes a library and user mode driver for the Airspy HF+ radio.  The source code and directions for building the package are on GitHub at:
+The Airspy HF+ Library is an open source  package that includes a library and user mode driver for the Airspy HF+ radio.  The source code and directions for building the package are in the Airspy airspyhf GitHub repository at:
 
 https://github.com/airspy/airspyhf
 
-To build the library on Raspberry Pi Raspbian, follow the directions under “How to build the host software on Linux.”  
+To build the library on Raspberry Pi Raspbian, follow the directions under “How to build the host software on Linux” in the README on the Airspy airspyhf GitHub repository.  
 
 To build the library on macOS, the first step of the Airspy directions for Linux (the command beginning “sudo apt-get install …”) must be replaced by a series of steps which install utilities and libraries that are required to build libairspyhf.  These utilities and libraries are: brew, libusb, cmake, wget and pkg-config.  The initial step of installing brew will also install some other packages including the Xcode Command Line Tools.  The complete sequence is as follows:
 
@@ -75,9 +75,27 @@ To build the library on macOS, the first step of the Airspy directions for Linux
  
 Step 2:  Download and Build hfp_tcp
 
-Follow the instructions on the green “Clone or Download” drop-down on the right side of the GitHub hfp_tcp main page to create a local copy of the repository either by cloning it or by downloading the entire repository as a .zip.  Cloning is recommended because it will create a directory containing the entire repository, and subsequent updates can be obtained by executing a “git pull”.   Downloading the .zip will result in a directory that contains only the source file and the Makefile.  In either case, from a terminal window, cd to this directory and execute the “make” command.  The hfp_tcp application will be built.  The terminal log should display Darwin for a build on Mac OS, and Linux for a build on Raspberry Pi, and the command that is being executed for the compile and link will be shown.   If the make is to be executed again and there is already an hfp_tcp executable in the directory, the command “make clean” should be run to remove it.
+The hfp_tcp application is a single source file.  It can be built with the included Makefile which requires header files and a dynamic library that were installed in Step 1 above.  The process is the same for both macOS and Raspberry Pi Raspbian.  The hfp_tcp application is on GitHub at: 
 
-To run the hfp_tcp application, connect an Airspy HF+ radio to the system via USB.  The hfp_tcp application can then be executed from the directory in which it was built with the command ./hfp_tcp.  By default, the application will listen for an incoming TCP/IP connection on port 1234.  An alternate port can be specified by with the -p flag.  For example, to start the application listening on port 1024, the command is:  ./hfp_tcp -p 1024.
+https://github.com/WB2ISS/hfp_tcp.
 
-	 
+The following commands should be executed in a terminal window.  These commands will clone the hfp_tcp repository from GitHub into a local directory and will then build and install the executable:
 
+	git clone https://github.com/WB2ISS/hfp_tcp.git
+	cd hfp_tcp
+	make
+	sudo make install
+
+The target operating system will be detected and applied to obtain the correct compile and link command for the target system.  The detected OS will be displayed as Darwin for macOS and Linux for Raspberry Pi Raspbian, and the build command that is being executed will be shown.   The sudo make install step will copy the executable into /usr/local/lib where it will be found as part of the standard execution path. 
+
+Compilation requires the header files airspyhf.h and airspyhf_commands.h and the executable requires the libairspyhf driver. If the Airspy HF+ Library has been installed as described in Step 1, these dependencies will have been placed in standard system locations and will be located by the compile and link process.  
+
+By cloning the hfp_tcp repository it becomes very easy to obtain updates.  First cd to the the hfp_tcp repository. Then the steps are:
+
+	git pull
+	make
+	sudo make install
+
+The git pull will obtain updates to the repository if there are any.  Then, if there was an update, the make step will detect that, and if the source code was updated it will build a new executable.  The sudo make install step will install the new executable in /usr/local/bin.
+
+To run the hfp_tcp application, connect an Airspy HF+ radio to the system via USB.  The hfp_tcp application can then be executed  with the command hfp_tcp.  By default, the application will listen for an incoming TCP/IP connection on port 1234.  An alternate port can be specified with the -p flag.  For example, to start the application listening on port 1024, the command is:  hfp_tcp -p 1024.
