@@ -1,33 +1,36 @@
 //
-// hfp_tcp_server.c
+//  hfp_tcp_server.c
 //
 //  Serves IQ data using the rtl_tcp protocol
-//	from an Airspy HF+
-//	on iPv6 port 1234
+//    from an Airspy HF+
+//    on iPv6 port 1234
 //
-//   v.1.1.302 2019.03.14 barry@medoff.com
-//   v.1.1.201 2018-06-09  2018-01-04  2017-12-29  rhn@nicholson.com
-//   Copyright 2017 Ronald H Nicholson Jr. All Rights Reserved.
+#define VERSION "v.1.2.111"
+//   v.1.2.111 2019-05-05  2pm  rhn
+//   v.1.2.109 2019.05.04 10pm barry@medoff.com
+//   Copyright 2017,2019 Ronald H Nicholson Jr. All Rights Reserved.
 //   re-distribution under the BSD 2 clause license permitted
 //
 //   macOS : clang hfp_tcp_server.c -o hfp_tcp -lm libairspyhf.1.0.0.dylib
-//   pi :    cc hfp_tcp_server.c -o hfp_tcp -std=c99 -lm -lairspyhf
+//   pi :    cc -std=c99 -lm -lairspyhf -O2 -o hfp_tcp hfp_tcp_server.c
 //
 //   requires these 2 files to compile
 //     airspyhf.h
 //     libairspyhf.1.0.0.dylib or /usr/local/lib/libairspyhf.so.1.0.0
 //   from libairspyhf at https://github.com/airspy/airspyhf
-
-#define VERSION "v.1.1.302"
+//
 
 #define SOCKET_READ_TIMEOUT_SEC ( 10.0 * 60.0 )
-#define SAMPLE_BITS 	( 8)			// default to match rtl_tcp
-// #define SAMPLE_BITS 	(16)			// default to match rsp_tcp
-// #define SAMPLE_BITS 	(32)    // HF+ capable of float32 IQ data
-#define GAIN8		(64.0)			// default gain
-#define PORT		(1234)			// default port
+#define SAMPLE_BITS     ( 8)    // default to match rtl_tcp
+// #define SAMPLE_BITS  (16)    // default to match rsp_tcp
+// #define SAMPLE_BITS  (32)    // HF+ capable of float32 IQ data
+#define GAIN8           (64.0)  // default gain
+#define PORT            (1234)  // default port
 
+#define _POSIX_C_SOURCE 200112L
 #include <stdio.h>
+#include <signal.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -40,7 +43,6 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include <errno.h>
 
 #ifndef _UNISTD_H_
 int usleep(unsigned long int usec);
@@ -50,40 +52,47 @@ int usleep(unsigned long int usec);
 
 #include "airspyhf.h"
 
-void *connection_handler();
-
+void *connection_handler(void);
 int sendcallback(airspyhf_transfer_t *context);
+static void sighandler(int signum);
 
-uint64_t            serialnum 	=  0;
-airspyhf_device_t   *device;
+uint64_t            serialnum   =  0;
+airspyhf_device_t   *device     =  NULL;
 airspyhf_transfer_t context;
 
 int             sendErrorFlag   =  0;
-int             sampleBits	    =  SAMPLE_BITS;
-static long int samples 	    =  0;
-long  		sampRate  	    =  768000;
-long		previousSRate	= -1;
-float		gain0		    =  GAIN8;
-int 		gClientSocketID;
+int             sampleBits      =  SAMPLE_BITS;
+static long int totalSamples    =  0;
+long        sampRate            =  768000;
+long        previousSRate       = -1;
+float        gain0              =  GAIN8;
+int        gClientSocketID      = -1;
+
+static int    listen_sockfd;
+struct sigaction    sigact, sigign;
+static volatile int     do_exit =  0;
+float        acc_r              =  0.0;    // accumulated rounding
+float        sMax               =  0.0;    // for debug
+float        sMin               =  0.0;
 
 char UsageString[]
-	= "Usage:    [-p listen port (default: 1234)]\n          [-b 16]";
+    = "Usage:    [-p listen port (default: 1234)]\n          [-b 16]";
 
 int main(int argc, char *argv[]) {
 
-    int listen_sockfd;
     struct sockaddr_in6 serv_addr ;
     char client_addr_ipv6[100];
-    int portno = PORT; 		// TODO: portno = atoi(argv[1]);
+    int portno     =  PORT;     // 
+    char *ipaddr =  NULL;       // "127.0.0.1"
     int n;
 
-    if (argc>1) {
-        if (!((argc == 3) || (argc == 5))) {
+    if (argc > 1) {
+    if ((argc % 2) != 1) {    
             printf("%s\n", UsageString);
             exit(0);
         }
         for (int arg=3; arg<=argc; arg+=2) {
-            if (strcmp(argv[arg-2], "-p")==0) {
+        if (strcmp(argv[arg-2], "-p")==0) {
                 portno = atoi(argv[arg-1]);
                 if (portno == 0) {
                     printf("invalid port number entry %s\n", argv[arg-1]);
@@ -98,6 +107,8 @@ int main(int argc, char *argv[]) {
                     printf("%s\n", UsageString);
                     exit(0);
                 }
+            } else if (strcmp(argv[arg-2], "-a")==0) {
+        ipaddr = argv[arg-1];        // unused 
             } else {
                 printf("%s\n", UsageString);
                 exit(0);
@@ -119,9 +130,22 @@ int main(int argc, char *argv[]) {
     serialnum = t;
     if (serialnum == 0L) { exit(-1); }
 
+    sigact.sa_handler = sighandler;
+    sigemptyset(&sigact.sa_mask);
+    sigact.sa_flags = 0;
+    sigaction(SIGINT,  &sigact, NULL);
+    sigaction(SIGTERM, &sigact, NULL);
+    sigaction(SIGQUIT, &sigact, NULL);
+#ifdef __APPLE__
+    signal(SIGPIPE, SIG_IGN);
+#else
+    sigign.sa_handler = SIG_IGN;
+    sigaction(SIGPIPE, &sigign, NULL);
+#endif
+
     n = airspyhf_open_sn(&device, serialnum);
     printf("hf+ open status = %d\n", n);
-    if (n < 0) { exit(-1); }
+    if ((n < 0) || (device == NULL)) { exit(-1); }
 
     airspyhf_lib_version_t version;
     airspyhf_lib_version(&version);
@@ -134,7 +158,10 @@ int main(int argc, char *argv[]) {
     bzero((char *)&versionString[0], 64);
 
     n = airspyhf_version_string_read(device, &versionString[0], versionLength);
-    if (n == AIRSPYHF_ERROR) { printf("Error reading version string"); exit(-1); }
+    if (n == AIRSPYHF_ERROR) { 
+    printf("Error reading version string"); 
+    exit(-1); 
+    }
     printf("hf+ firmware %s\n\n", versionString);
 
     int sampRate = 768000;
@@ -153,19 +180,19 @@ int main(int argc, char *argv[]) {
         return(-1);
     }
 
-#ifdef __APPLE__
-    int val = 1;
-    int r = setsockopt(listen_sockfd, SOL_SOCKET, SO_NOSIGPIPE,
-                       (void*)&val, sizeof(val));
-    printf("setsockopt status = %d \n", r);
-#endif
+    struct linger ling = {1,0};
+    int rr = 1;
+    setsockopt(listen_sockfd, SOL_SOCKET, SO_REUSEADDR, 
+            (char *)&rr, sizeof(int));
+    setsockopt(listen_sockfd, SOL_SOCKET, SO_LINGER, 
+            (char *)&ling, sizeof(ling));
 
     bzero((char *) &serv_addr, sizeof(serv_addr));
     serv_addr.sin6_flowinfo = 0;
     serv_addr.sin6_family = AF_INET6;
     serv_addr.sin6_addr = in6addr_any;
     serv_addr.sin6_port = htons(portno);
-
+ 
     // Sockets Layer Call: bind()
     if (bind( listen_sockfd, (struct sockaddr *)&serv_addr,
              sizeof(serv_addr) ) < 0) {
@@ -205,25 +232,45 @@ int main(int argc, char *argv[]) {
     return 0;
 }  //  main
 
+static void sighandler(int signum)
+{
+        fprintf(stderr, "Signal caught, exiting!\n");
+        fflush(stderr);
+        close(listen_sockfd);
+        if (gClientSocketID != 0) {
+            close(gClientSocketID);
+            gClientSocketID = -1;
+        }
+        if (device != NULL) {
+            airspyhf_close(device);
+            device = NULL;
+        }
+    exit(-1);
+        do_exit = 1;
+}
+
 void *connection_handler()
 {
     char buffer[256];
     int n = 0;
     int m = 0;
 
+    if (do_exit != 0) { return(NULL); }
+
     m = airspyhf_is_streaming(device);
-    if (m > 0) {	// stop before restarting
+    if (m > 0) {    // stop before restarting
         printf("hf+ is running = %d\n", m);
         m = airspyhf_stop(device);
         printf("hf+ stop status = %d\n", m);
         usleep(250L * 1000L);
     }
 
-    samples 	=  0;
+    acc_r      =  0.0;
+    totalSamples  =  0;
     sendErrorFlag =  0;
     m = airspyhf_start(device, &sendcallback, &context);
     printf("hf+ start status = %d\n", m);
-    if (n < 0) { exit(-1); }
+    if (m < 0) { exit(-1); }
     usleep(250L * 1000L);
 
     // set a timeout so receive call won't block forever
@@ -233,11 +280,11 @@ void *connection_handler()
     //setsockopt( gClientSocketID, SOL_SOCKET, SO_RCVTIMEO,
     //           &timeout, sizeof(timeout) );
 
-    if (1) {		// 16 or 12-byte rtl_tcp header
+    if (1) {        // 16 or 12-byte rtl_tcp header
         int sz = 16;
         if (sampleBits == 8) { sz = 12; }
         // HFP0 16
-        char header[16] = { 0x48,0x46,0x50,0x30, 0,0,0,16,
+        char header[16] = { 0x48,0x46,0x50,0x30, 0,0,0,sampleBits,
             0,0,0,1, 0,0,0,2 };
 #ifdef __APPLE__
         n = send(gClientSocketID, header, sz, 0);
@@ -278,13 +325,13 @@ void *connection_handler()
                     data = 256 * data + (0x00ff & buffer[i+j]);
                 }
 
-                if (msg == 1) {	// set frequency
+                if (msg == 1) {    // set frequency
                     int f0 = data;
                     fprintf(stdout, "setting frequency to: %d\n", f0);
                     m = airspyhf_set_freq(device, f0);
                     printf("set frequency status = %d\n", m);
                 }
-                if (msg == 2) {	// set sample rate
+                if (msg == 2) {    // set sample rate
                     int r = data;
                     if (r != previousSRate) {
                         fprintf(stdout, "setting samplerate to: %d\n", r);
@@ -294,30 +341,34 @@ void *connection_handler()
                         previousSRate = r;
                     }
                 }
-                if (msg == 3) {	// other
+                if (msg == 3) {    // other
                     fprintf(stdout, "message = %d, data = %d\n", msg, data);
                 }
-                if (msg == 4) { 			// gain
+                if (msg == 4) {            // gain
                     if (   (sampleBits ==  8)
- 			|| (sampleBits == 16) ) {
+            || (sampleBits == 16) ) {
                         // set gain ?
                         float g1 = data; // data : in 10th dB's
                         float g2 = 0.1 * (float)(data); // undo 10ths
                         fprintf(stdout, "setting gain to: %f dB\n", g2);
                         float g4 = g2 - 12.0; // ad hoc offset
                         float g5 = pow(10.0, 0.1 * g4); // convert from dB
-                        gain0 = GAIN8 * g5;		// 64.0 = nominal
+                        gain0 = GAIN8 * g5;        // 64.0 = nominal
                         msg1 = msg;
-		    }
+                        float  g8  =  gain0; // GAIN8;
+                        fprintf(stdout, "8b  gain multiplier = %f\n", g8);
+                float  g16 =   64.0 * gain0; // GAIN16;
+                        fprintf(stdout, "16b gain multiplier = %f\n", g16);
+            }
                 }
-                if (msg > 4) {	// other
+                if (msg > 4) {    // other
                     fprintf(stdout, "message = %d, data = %d\n", msg, data);
                 }
             }
             if (msg1 != 4) {
                 m = airspyhf_is_streaming(device);
                 printf("hf+ is running = %d\n", m);
-                if (m == 0) {	// restart if command stops things
+                if (m == 0) {    // restart if command stops things
                     sendErrorFlag =  0;
                     m = airspyhf_start(device, &sendcallback, &context);
                     fprintf(stdout, "hf+ start status = %d\n", m);
@@ -348,52 +399,97 @@ void *connection_handler()
 int sendblockcount = 0;
 uint8_t tmpBuf[4*32768];
 
+typedef union 
+{
+    uint32_t i;
+    float    f;
+} Float32_t;
+
+float rand_float_co()
+{
+    Float32_t x;
+    x.i = 0x3f800000 | (rand() & 0x007fffff);
+    return(x.f - 1.0f);
+}
+
+
 int sendcallback(airspyhf_transfer_t *context)
 {
     float  *p =  (float *)(context->samples);
     int    n  =  context->sample_count;
-    int	   sz ;
+    int       sz ;
 
+    if (do_exit != 0) { return(-1); }
     //
-    if ((sendblockcount % 100) == 0) {
+    if ((sendblockcount % 1000) == 0) {
         fprintf(stdout,"+"); fflush(stdout);
-        fprintf(stdout," %d ", n); fflush(stdout);
     }
     //
     if (p != NULL && n > 0) {
         // fwrite(p, 8, n, file);
-        char  	*dataBuffer 	=  (char *)p;
-        int 	k 		=  0;
+        char    *dataBuffer    =  (char *)p;
+        int    k        =  0;
         if (sampleBits ==  8) {
-            float  g  =  gain0; // GAIN8;
+            float  g8  =  gain0; // GAIN8;
+            // gain is typically 64.0
+            // should be 128.0 or 2X larger, so 1-bit missing
+            float rnd0A = rand_float_co();
+            float rnd0B = rand_float_co();
             for (int i=0; i<2*n; i++) {
-                float x = g * p[i];
+                float x;
+                Float32_t x1;          // for debug hex print
+                x    = p[i];
+                float y = g8 * x;
+                // add triangular noise
+                // for noise filtered rounding 
+                float rnd1 = rand_float_co(); // noise with pdf [0..1)
+                float r = rnd1 - (((i&1)==1) ? rnd0A : rnd0B);
+                y = y + r;
+                float ry = roundf(y);
+                acc_r += (y - ry);     // for future noise filtering
+                k = (int)ry;
+                tmpBuf[i] = k + 128;
+                if ((i&1) == 1) {      // round I
+                    rnd0A = rnd1;      // save for next iteration
+                } else {               // round Q
+                    rnd0B = rnd1;      // save for next iteration
+                }
+            }
+            // previous rounding
+            /*
+            for (int i=0; i<2*n; i++) {
+                float x = g8 * p[i];
                 int   k = (int)roundf(x);
                 tmpBuf[i] = k + 128;  // 8-bit unsigned DC offset
             }
+            */
             dataBuffer = (char *)(&tmpBuf[0]);
             sz = 2 * n;
         } else if (sampleBits == 16) {
             int16_t *tmp16ptr = (int16_t *)&tmpBuf[0];
-	    float  g  =   64.0 * gain0; // GAIN16;
+            float  g16  =   64.0 * gain0; // GAIN16;
+            // gain is typically 64.0 * 64.0 = 4096.0
+            // should be 32768.0 or 8X larger, so 3-bits missing
             for (int i=0; i<2*n; i++) {
-                float x = g * p[i];
+                float x = g16 * p[i];
                 int   k = (int)roundf(x);
                 tmp16ptr[i] = k;
             }
             dataBuffer = (char *)(&tmpBuf[0]);
             sz = 4 * n;
-	} else {
-	    sz = 8 * n;	// two 32-bit floats for IQ == 8 bytes
-	}
+        } else {
+            sz = 8 * n;    // two 32-bit floats for IQ == 8 bytes
+        }
         int send_sockfd = gClientSocketID ;
+        if (do_exit != 0) { return(-1); }
 #ifdef __APPLE__
         k = send(send_sockfd, dataBuffer, sz, 0);
 #else
         k = send(send_sockfd, dataBuffer, sz, MSG_NOSIGNAL);
 #endif
+        if (do_exit != 0) { return(-1); }
         if (k <= 0) { sendErrorFlag = -1; }
-        samples += n;
+        totalSamples += n;
     }
     sendblockcount += 1;
     return(0);
