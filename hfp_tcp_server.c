@@ -5,7 +5,8 @@
 //    from an Airspy HF+
 //    on iPv6 port 1234
 //
-#define VERSION "v.1.2.111"
+#define VERSION "v.1.2.112"
+//   v.1.2.112 2019-07-30  0am barry@medoff.com
 //   v.1.2.111 2019-05-05  2pm  rhn
 //   v.1.2.109 2019.05.04 10pm barry@medoff.com
 //   Copyright 2017,2019 Ronald H Nicholson Jr. All Rights Reserved.
@@ -82,12 +83,12 @@ int main(int argc, char *argv[]) {
 
     struct sockaddr_in6 serv_addr ;
     char client_addr_ipv6[100];
-    int portno     =  PORT;     // 
+    int portno     =  PORT;     //
     char *ipaddr =  NULL;       // "127.0.0.1"
     int n;
 
     if (argc > 1) {
-    if ((argc % 2) != 1) {    
+    if ((argc % 2) != 1) {
             printf("%s\n", UsageString);
             exit(0);
         }
@@ -108,7 +109,7 @@ int main(int argc, char *argv[]) {
                     exit(0);
                 }
             } else if (strcmp(argv[arg-2], "-a")==0) {
-        ipaddr = argv[arg-1];        // unused 
+        ipaddr = argv[arg-1];        // unused
             } else {
                 printf("%s\n", UsageString);
                 exit(0);
@@ -158,11 +159,24 @@ int main(int argc, char *argv[]) {
     bzero((char *)&versionString[0], 64);
 
     n = airspyhf_version_string_read(device, &versionString[0], versionLength);
-    if (n == AIRSPYHF_ERROR) { 
-    printf("Error reading version string"); 
-    exit(-1); 
+    if (n == AIRSPYHF_ERROR) {
+    printf("Error reading version string");
+    exit(-1);
     }
     printf("hf+ firmware %s\n\n", versionString);
+
+    uint32_t sr_buffer[100];
+    airspyhf_get_samplerates(device, sr_buffer, 0);
+    uint32_t sr_len = sr_buffer[0];
+    printf("number of supported sample rates: %d \n", sr_len);
+    if (sr_len > 0 && sr_len < 100) {
+      airspyhf_get_samplerates(device, sr_buffer, sr_len);
+      printf("supported sample rates: ");
+        for (int i=0; i<sr_len; i++) {
+          printf("%d ", sr_buffer[i]);
+        }
+        printf(" \n\n");
+    }
 
     int sampRate = 768000;
     n = airspyhf_set_samplerate(device, sampRate);
@@ -182,9 +196,9 @@ int main(int argc, char *argv[]) {
 
     struct linger ling = {1,0};
     int rr = 1;
-    setsockopt(listen_sockfd, SOL_SOCKET, SO_REUSEADDR, 
+    setsockopt(listen_sockfd, SOL_SOCKET, SO_REUSEADDR,
             (char *)&rr, sizeof(int));
-    setsockopt(listen_sockfd, SOL_SOCKET, SO_LINGER, 
+    setsockopt(listen_sockfd, SOL_SOCKET, SO_LINGER,
             (char *)&ling, sizeof(ling));
 
     bzero((char *) &serv_addr, sizeof(serv_addr));
@@ -192,7 +206,7 @@ int main(int argc, char *argv[]) {
     serv_addr.sin6_family = AF_INET6;
     serv_addr.sin6_addr = in6addr_any;
     serv_addr.sin6_port = htons(portno);
- 
+
     // Sockets Layer Call: bind()
     if (bind( listen_sockfd, (struct sockaddr *)&serv_addr,
              sizeof(serv_addr) ) < 0) {
@@ -399,7 +413,7 @@ void *connection_handler()
 int sendblockcount = 0;
 uint8_t tmpBuf[4*32768];
 
-typedef union 
+typedef union
 {
     uint32_t i;
     float    f;
@@ -441,7 +455,7 @@ int sendcallback(airspyhf_transfer_t *context)
                 x    = p[i];
                 float y = g8 * x;
                 // add triangular noise
-                // for noise filtered rounding 
+                // for noise filtered rounding
                 float rnd1 = rand_float_co(); // noise with pdf [0..1)
                 float r = rnd1 - (((i&1)==1) ? rnd0A : rnd0B);
                 y = y + r;
