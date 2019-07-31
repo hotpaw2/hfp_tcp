@@ -5,19 +5,21 @@
 //    from an Airspy HF+
 //    on iPv6 port 1234
 //
-#define VERSION "v.1.2.112"
+#define VERSION "v.1.2.114" // beta 02
+//   v.1.2.114 2019-07-31  rhn 
 //   v.1.2.112 2019-07-30  0am barry@medoff.com
 //   v.1.2.111 2019-05-05  2pm  rhn
 //   v.1.2.109 2019.05.04 10pm barry@medoff.com
 //   Copyright 2017,2019 Ronald H Nicholson Jr. All Rights Reserved.
 //   re-distribution under the BSD 2 clause license permitted
 //
-//   macOS : clang hfp_tcp_server.c -o hfp_tcp -lm libairspyhf.1.0.0.dylib
+//   macOS : clang hfp_tcp_server.c -o hfp_tcp -lm -llibairspyhf
+//   					// libairspyhf.1.6.8.dylib
 //   pi :    cc -std=c99 -lm -lairspyhf -O2 -o hfp_tcp hfp_tcp_server.c
 //
 //   requires these 2 files to compile
 //     airspyhf.h
-//     libairspyhf.1.0.0.dylib or /usr/local/lib/libairspyhf.so.1.0.0
+//     libairspyhf.1.6.8.dylib or /usr/local/lib/libairspyhf.so.1.6.8
 //   from libairspyhf at https://github.com/airspy/airspyhf
 //
 
@@ -63,6 +65,7 @@ airspyhf_transfer_t context;
 
 int             sendErrorFlag   =  0;
 int             sampleBits      =  SAMPLE_BITS;
+int             sampleRates     =  1;
 static long int totalSamples    =  0;
 long        sampRate            =  768000;
 long        previousSRate       = -1;
@@ -170,6 +173,7 @@ int main(int argc, char *argv[]) {
     uint32_t sr_len = sr_buffer[0];
     printf("number of supported sample rates: %d \n", sr_len);
     if (sr_len > 0 && sr_len < 100) {
+      sampleRates     =  sr_len;
       airspyhf_get_samplerates(device, sr_buffer, sr_len);
       printf("supported sample rates: ");
         for (int i=0; i<sr_len; i++) {
@@ -298,7 +302,8 @@ void *connection_handler()
         int sz = 16;
         if (sampleBits == 8) { sz = 12; }
         // HFP0 16
-        char header[16] = { 0x48,0x46,0x50,0x30, 0,0,0,sampleBits,
+        char header[16] = { 0x48,0x46,0x50,0x30, 
+	    0x30,0x30,0x30+sampleRates,0x30+sampleBits,
             0,0,0,1, 0,0,0,2 };
 #ifdef __APPLE__
         n = send(gClientSocketID, header, sz, 0);
@@ -348,11 +353,27 @@ void *connection_handler()
                 if (msg == 2) {    // set sample rate
                     int r = data;
                     if (r != previousSRate) {
+		        int restartflag = 0;
                         fprintf(stdout, "setting samplerate to: %d\n", r);
                         sampRate = r;
+    			m = airspyhf_is_streaming(device);
+    			if (m > 0) {    // stop before restarting
+        		    m = airspyhf_stop(device);
+		            restartflag = 1;
+			    usleep(50L * 1000L);
+			}
                         m = airspyhf_set_samplerate(device, sampRate);
                         printf("set samplerate status = %d\n", m);
                         previousSRate = r;
+		        if (restartflag == 1) {
+			    usleep(50L * 1000L);
+                            m = airspyhf_start(device, 
+			    		&sendcallback, &context);
+                            fprintf(stdout, "hf+ start status = %d\n", m);
+                            m = airspyhf_is_streaming(device);
+                            fprintf(stdout, "hf+ is running = %d\n", m);
+                            fflush(stdout);
+			}
                     }
                 }
                 if (msg == 3) {    // other
