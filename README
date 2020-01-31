@@ -14,9 +14,9 @@ The Airspy HF+ Library is an open source  package that includes a library and us
 
 https://github.com/airspy/airspyhf
 
-To build the library on Raspberry Pi Raspbian, follow the directions under “How to build the host software on Linux” in the README on the Airspy airspyhf GitHub repository.  
+To build the library on Raspberry Pi Raspbian, follow the directions under “How to build the host software on Linux” in the README on the Airspy airspyhf GitHub repository.
 
-To build the library on macOS, the first step of the Airspy directions for Linux (the command beginning “sudo apt-get install …”) must be replaced by a series of steps which install utilities and libraries that are required to build libairspyhf.  These utilities and libraries are: brew, libusb, cmake, wget and pkg-config.  The initial step of installing brew will also install some other packages including the Xcode Command Line Tools.  The complete sequence is as follows:
+To build the library on macOS, the first step of the Airspy directions for Linux (the command beginning “sudo apt-get install …”) must be replaced by a series of steps which install utilities and libraries that are required to build libairspyhf.  These utilities and libraries are: brew, libusb, cmake and pkg-config.  The initial step of installing brew will also install some other packages including the Xcode Command Line Tools.  The complete sequence is as follows:
 
 	Install Homebrew
 
@@ -25,7 +25,7 @@ To build the library on macOS, the first step of the Airspy directions for Linux
 		/usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
 
 
-	Install libusb 
+	Install libusb
 
 		http://macappstore.org/libusb/
 		https://stackoverflow.com/questions/3853634/how-to-set-up-libusb-on-mac-os-x
@@ -33,9 +33,9 @@ To build the library on macOS, the first step of the Airspy directions for Linux
 		brew install libusb
 		brew link libusb
 
-		The link step will attempt to create symbolic links in /usr/local/lib 
-		for libusb-1.0.0.dylib and libusb-1.0.dylib and some other files, and 
-		will fail if any of these exist.  If that happens, move or remove the 
+		The link step will attempt to create symbolic links in /usr/local/lib
+		for libusb-1.0.0.dylib and libusb-1.0.dylib and some other files, and
+		will fail if any of these exist.  If that happens, move or remove the
 		files that are reported as already existing.
 
 	Install CMake
@@ -44,11 +44,6 @@ To build the library on macOS, the first step of the Airspy directions for Linux
 		https://stackoverflow.com/questions/32185079/installing-cmake-with-home-brew
 
 		brew install cmake
-
-	Install wget
-
-		brew install wget
-
 
 	Install pkg-config
 
@@ -72,10 +67,10 @@ To build the library on macOS, the first step of the Airspy directions for Linux
 
 		sudo make install
 
- 
+
 Step 2:  Download and Build hfp_tcp
 
-The hfp_tcp application is a single source file.  It can be built with the included Makefile which requires header files and a dynamic library that were installed in Step 1 above.  The process is the same for both macOS and Raspberry Pi Raspbian.  The hfp_tcp application is on GitHub at: 
+The hfp_tcp application is a single source file.  It can be built with the included Makefile which requires header files and a dynamic library that were installed in Step 1 above.  The process is the same for both macOS and Raspberry Pi Raspbian.  The hfp_tcp application is on GitHub at:
 
 https://github.com/WB2ISS/hfp_tcp.
 
@@ -86,9 +81,9 @@ The following commands should be executed in a terminal window.  These commands 
 	make
 	sudo make install
 
-The target operating system will be detected and applied to obtain the correct compile and link command for the target system.  The detected OS will be displayed as Darwin for macOS and Linux for Raspberry Pi Raspbian, and the build command that is being executed will be shown.   The sudo make install step will copy the executable into /usr/local/lib where it will be found as part of the standard execution path. 
+The target operating system will be detected and applied to obtain the correct compile and link command for the target system.  The detected OS will be displayed as Darwin for macOS and Linux for Raspberry Pi Raspbian, and the build command that is being executed will be shown.   The sudo make install step will copy the executable into /usr/local/lib where it will be found as part of the standard execution path.
 
-Compilation requires the header files airspyhf.h and airspyhf_commands.h and the executable requires the libairspyhf driver. If the Airspy HF+ Library has been installed as described in Step 1, these dependencies will have been placed in standard system locations and will be located by the compile and link process.  
+Compilation requires the header files airspyhf.h and airspyhf_commands.h and the executable requires the libairspyhf driver. If the Airspy HF+ Library has been installed as described in Step 1, these dependencies will have been placed in standard system locations and will be located by the compile and link process.
 
 By cloning the hfp_tcp repository it becomes very easy to obtain updates.  First cd to the the hfp_tcp repository. Then the steps are:
 
@@ -99,3 +94,7 @@ By cloning the hfp_tcp repository it becomes very easy to obtain updates.  First
 The git pull will obtain updates to the repository if there are any.  Then, if there was an update, the make step will detect that, and if the source code was updated it will build a new executable.  The sudo make install step will install the new executable in /usr/local/bin.
 
 To run the hfp_tcp application, connect an Airspy HF+ radio to the system via USB.  The hfp_tcp application can then be executed  with the command hfp_tcp.  By default, the application will listen for an incoming TCP/IP connection on port 1234.  An alternate port can be specified with the -p flag.  For example, to start the application listening on port 1024, the command is:  hfp_tcp -p 1024.
+
+By default, for compatibility with the rtl_tcp protocol, hfp_tcp streams data consisting of 8-bit samples.  In order to take advantage of the additional resolution of the analog to digital converter in the Airspy HF+ radio, hfp_tcp can also stream data consisting of 16-bit samples.  To stream 16-bit samples to SDR Receiver, start hfp_tcp with the -b 16 flag and in SDR Receiver, on the Settings tab, select Sampling and set Sample Size to 16-bits.
+
+Readme.v18
