@@ -5,12 +5,13 @@
 //    from an Airspy HF+
 //    on iPv6 port 1234
 //
-#define VERSION "v.1.2.115-a3" // alpha 03
+#define VERSION "v.1.2.115-a4" // alpha 04
 //   v.1.2.115 2019-10-16  rhn
 //
 //   pi :
 //   cc -std=c99 -lm -lairspyhf -lpthread -Os -o hfp_tcp hfp_tcp_server.c
 //
+//   v.1.2.115-a4 2019-09-23  barry@medoff.com
 //   v.1.2.115 2019-09-23  rhn
 //   v.1.2.114 2019-07-31  rhn
 //   v.1.2.112 2019-07-30  0am barry@medoff.com
@@ -215,7 +216,7 @@ int main(int argc, char *argv[]) {
     n = airspyhf_set_freq(device, f0);
     printf("set f0 status = %ld %d\n", f0, n);
 
-    printf("\nhfp_tcp IPv6 server started on port %d\n", portno);
+    printf("\nhfp_tcp server started on port %d\n", portno);
 
     listen_sockfd = socket(AF_INET6, SOCK_STREAM, 0);
     if (listen_sockfd < 0) {
@@ -353,7 +354,7 @@ int ring_write(char *from_ptr, int amount)
     return(wrap);
 }
 
-int ring_read(char *to_ptr, int amount, int always)
+int ring_read(uint8_t *to_ptr, int amount, int always)
 {
     int bytes_read = 0;
     int r_index = ring_rd_index;  // my index
