@@ -5,21 +5,19 @@
 //    from an Airspy HF+
 //    on iPv6 port 1234
 //
-#define VERSION "v.1.2.115-a3" // alpha 03
-//   v.1.2.115 2019-10-16  rhn 
-//
-//   pi :    
-//   cc -std=c99 -lm -lairspyhf -lpthread -Os -o hfp_tcp hfp_tcp_server.c
-//
-//   v.1.2.115 2019-09-23  rhn 
-//   v.1.2.114 2019-07-31  rhn 
+#define VERSION "v.1.2.116" // 116b4
+//   v.1.2.116 2020-08-25  rhn 
 //   v.1.2.112 2019-07-30  0am barry@medoff.com
 //   v.1.2.111 2019-05-05  2pm  rhn
 //   v.1.2.109 2019.05.04 10pm barry@medoff.com
 //   Copyright 2017,2019 Ronald H Nicholson Jr. All Rights Reserved.
-//   re-distribution under the BSD 2 clause license permitted
+//   re-distribution under the BSD 3 clause license permitted
 //
-//   macOS : clang -lm -llibairspyhf -lpthread -Os -o hfp_tcp hfp_tcp_server.c 
+//   pi :    
+//   	cc -std=c99 -lm -lairspyhf -lpthread -Os -o hfp_tcp hfp_tcp_server.c
+//
+//   macOS : 
+//	clang -lm -llibairspyhf -lpthread -Os -o hfp_tcp hfp_tcp_server.c 
 //   					// libairspyhf.1.6.8.dylib
 //
 //   requires these 2 files to compile
@@ -75,14 +73,14 @@ airspyhf_transfer_t context;
 
 int             sendErrorFlag   =  0;
 int             sampleBits      =  SAMPLE_BITS;
-int             sampleRates     =  1;
+int         numSampleRates      =  1;
 static long int totalSamples    =  0;
 long        sampRate            =  768000;
 long        previousSRate       = -1;
-float        gain0              =  GAIN8;
+float       gain0               =  GAIN8;
 int        gClientSocketID      = -1;
 
-char 	   *ring_buffer_ptr     =  NULL;
+uint8_t	   *ring_buffer_ptr     =  NULL;
 int		decimateFlag	=  1;
 int		decimateCntr	=  0;
 int		filterFlag	=  0;
@@ -141,7 +139,7 @@ int main(int argc, char *argv[]) {
 
     printf("\nhfp_tcp Version %s\n\n", VERSION);
 
-    ring_buffer_ptr = (char *)malloc(RING_BUFFER_ALLOCATION + 4);
+    ring_buffer_ptr = (uint8_t *)malloc(RING_BUFFER_ALLOCATION + 4);
     if (ring_buffer_ptr == NULL) { exit(-1); }
     bzero(ring_buffer_ptr, RING_BUFFER_ALLOCATION + 2);
 
@@ -197,7 +195,7 @@ int main(int argc, char *argv[]) {
     uint32_t sr_len = sr_buffer[0];
     printf("number of supported sample rates: %d \n", sr_len);
     if (sr_len > 0 && sr_len < 100) {
-      sampleRates     =  sr_len;
+      numSampleRates     =  sr_len;
       airspyhf_get_samplerates(device, sr_buffer, sr_len);
       printf("supported sample rates: ");
         for (int i=0; i<sr_len; i++) {
@@ -311,7 +309,7 @@ int ring_data_available()
     return(n);
 }
 
-int ring_write(char *from_ptr, int amount)
+int ring_write(uint8_t *from_ptr, int amount)
 {
     int wrap = 0;
     int w_index = ring_wr_index;  // my index
@@ -320,7 +318,21 @@ int ring_write(char *from_ptr, int amount)
         || (w_index >= ring_buffer_size) ) { return(-1); }  // error !
     if (decimateFlag > 1) {
         int i;
-        for (i = 0; i < amount; i += 2) {
+        if (sampleBits == 16) { 
+          for (i = 0; i < amount; i += 4) {
+            if (decimateCntr == 0) {
+	      ring_buffer_ptr[w_index  ] = from_ptr[i  ];
+	      ring_buffer_ptr[w_index+1] = from_ptr[i+1];
+	      ring_buffer_ptr[w_index+2] = from_ptr[i+2];
+	      ring_buffer_ptr[w_index+3] = from_ptr[i+3];
+              w_index += 4;
+              if (w_index >= ring_buffer_size) { w_index = 0; }
+	    }
+	    decimateCntr += 1;
+	    if (decimateCntr >= decimateFlag) { decimateCntr = 0; }
+	  }
+	} else {	// assume samplebits == 8
+          for (i = 0; i < amount; i += 2) {
             if (decimateCntr == 0) {
 	      ring_buffer_ptr[w_index  ] = from_ptr[i  ];
 	      ring_buffer_ptr[w_index+1] = from_ptr[i+1];
@@ -329,6 +341,7 @@ int ring_write(char *from_ptr, int amount)
 	    }
 	    decimateCntr += 1;
 	    if (decimateCntr >= decimateFlag) { decimateCntr = 0; }
+	  }
 	}
     } else if (w_index + amount < ring_buffer_size) {
         memcpy(&ring_buffer_ptr[w_index], from_ptr, amount);
@@ -352,7 +365,7 @@ int ring_write(char *from_ptr, int amount)
     return(wrap);
 }
         
-int ring_read(char *to_ptr, int amount, int always)
+int ring_read(uint8_t *to_ptr, int amount, int always)
 {
     int bytes_read = 0;
     int r_index = ring_rd_index;  // my index
@@ -457,7 +470,7 @@ void *connection_handler()
         if (sampleBits == 8) { sz = 12; }
         // HFP0 16
         char header[16] = { 0x48,0x46,0x50,0x30, 
-	    0x30,0x30,0x30+sampleRates,0x30+sampleBits,
+	    0x30,0x30,0x30+numSampleRates,0x30+sampleBits,
             0,0,0,1, 0,0,0,2 };
 #ifdef __APPLE__
         n = send(gClientSocketID, header, sz, 0);
@@ -541,7 +554,7 @@ void *connection_handler()
                     int r = data;
                     if ((r != previousSRate) || (decimateFlag > 1)) {
 		        int restartflag = 0;
-			if (r == 48000) {
+			if ((r == 48000) && (numSampleRates <= 4)) {
                           fprintf(stdout, 
 			    "decimating 192k sample rate to 48k\n");
 			  decimateFlag = 4;
@@ -662,7 +675,7 @@ int usb_rcv_callback(airspyhf_transfer_t *context)
     //
     if (p != NULL && n > 0) {
         // fwrite(p, 8, n, file);
-        char    *dataBuffer    =  (char *)p; 	// unneeded line
+        uint8_t *dataBuffer    =  (uint8_t *)p; 	// unneeded line
 	memcpy(&tmpFPBuf[0], p, 8*n);
 	if (filterFlag != 0) {
             int order =  12;
@@ -704,7 +717,7 @@ int usb_rcv_callback(airspyhf_transfer_t *context)
                 tmpBuf[i] = k + 128;  // 8-bit unsigned DC offset
             }
             */
-            dataBuffer = (char *)(&tmpBuf[0]);
+            dataBuffer = (uint8_t *)(&tmpBuf[0]);
             sz = 2 * n;
         } else if (sampleBits == 16) {
             int16_t *tmp16ptr = (int16_t *)&tmpBuf[0];
@@ -716,7 +729,7 @@ int usb_rcv_callback(airspyhf_transfer_t *context)
                 int   k = (int)roundf(x);
                 tmp16ptr[i] = k;
             }
-            dataBuffer = (char *)(&tmpBuf[0]);
+            dataBuffer = (uint8_t *)(&tmpBuf[0]);
             sz = 4 * n;
         } else {
             sz = 8 * n;    // two 32-bit floats for IQ == 8 bytes
