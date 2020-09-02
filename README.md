@@ -37,7 +37,7 @@ and
 [libairspyhf](https://github.com/airspy/airspyhf) . 
 See instruction in those repositories for how to build them.  
 Builds have been tested on Raspbian for the Raspberry Pi 3B and 4, 
-and on macOS, x86 or Apple Silicon.
+and on macOS.
 
 Usage:
 

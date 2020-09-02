@@ -5,8 +5,8 @@
 //    from an Airspy HF+
 //    on iPv6 port 1234
 //
-#define VERSION "v.1.2.116" // 116b4
-//   v.1.2.116 2020-08-25  rhn 
+#define VERSION "v.1.2.117" // b1
+//   v.1.2.117 2020-09-02  rhn 
 //   v.1.2.112 2019-07-30  0am barry@medoff.com
 //   v.1.2.111 2019-05-05  2pm  rhn
 //   v.1.2.109 2019.05.04 10pm barry@medoff.com
@@ -552,9 +552,12 @@ void *connection_handler()
                 }
                 if (msg == 2) {    // set sample rate
                     int r = data;
+		    if (numSampleRates == 1 && r != 768000) {
+                        printf("error: unsupported sample rate command\n");
+		    }
                     if ((r != previousSRate) || (decimateFlag > 1)) {
 		        int restartflag = 0;
-			if ((r == 48000) && (numSampleRates <= 4)) {
+			if ((r == 48000) && (numSampleRates >= 4)) {
                           fprintf(stdout, 
 			    "decimating 192k sample rate to 48k\n");
 			  decimateFlag = 4;
