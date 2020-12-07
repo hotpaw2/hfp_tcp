@@ -5,7 +5,7 @@
 //    from an Airspy HF+
 //    on iPv6 port 1234
 //
-#define VERSION "v.1.2.117" // b1
+#define VERSION "v.1.2.120" // 2020-12-06 rhn
 //   v.1.2.117 2020-09-02  rhn 
 //   v.1.2.112 2019-07-30  0am barry@medoff.com
 //   v.1.2.111 2019-05-05  2pm  rhn
@@ -26,7 +26,7 @@
 //   from libairspyhf at https://github.com/airspy/airspyhf
 //
 
-#define SOCKET_READ_TIMEOUT_SEC ( 10.0 * 60.0 )
+#define SOCKET_READ_TIMEOUT_SEC ( 60.0 * 60.0 )
 #define SAMPLE_BITS     ( 8)    // default to match rtl_tcp
 // #define SAMPLE_BITS  (16)    // default to match rsp_tcp
 // #define SAMPLE_BITS  (32)    // HF+ capable of float32 IQ data
@@ -609,7 +609,7 @@ void *connection_handler()
                         fprintf(stdout, "8b  gain multiplier = %f\n", g8);
                         float  g16 =   64.0 * gain0; // GAIN16;
                         fprintf(stdout, "16b gain multiplier = %f\n", g16);
-            }
+                    }
                 }
                 if (msg > 4) {            // other
                     fprintf(stdout, "message = %d, data = %d\n", msg, data);
