@@ -1,4 +1,4 @@
-## hl2_tcp
+## hfp_tcp
 
 This repository contains source code for hfp_tcp, 
 an rtl_tcp "work-alike" server
